@@ -229,15 +229,25 @@ extern "C" {
 //                   2. on power up if no or low voltage will not enter setup
 // v01_61 10 14 2020 1. reworked low power voltage issues and made sure that error states are all checked
 //                          and updates LED to yellow when needed. 
+// v01_62 10 17 2020 1. reworked low power in that even if OFF will read the ADC. 
+//                   2. before extension, if low will not proceed
+//                   3. will charge supercap before clearing a low input voltage. 
+//                   4. all error states will be able to turn the unit off. 
+// v01_63 10 19 2020 1. 500 msec input low error from 3 sec
+//                   2. fresh on each turn off of low voltge errors
+//                   3. added WAIT_ON_SETUP to 25msec sampling
+//                   4. load wait back to ERROR 
+// v01_64 10 20 2020 1. added clearing on errors when power is cycled. 
+//                   2. 
 #define FWVER3 '0'
 #define FWVER2 '1'
 #define FWVER1 '6'
-#define FWVER0 '1'
+#define FWVER0 '4'
 
 #define MONTHMSB  '1'
 #define MONTHLSB  '0'
-#define DAYMSB    '1'
-#define DAYLSB    '4'
+#define DAYMSB    '2'
+#define DAYLSB    '0'
 #define YEARMSB   '2'
 #define YEARLSB   '0'
 #endif
@@ -317,7 +327,7 @@ typedef struct
 	#define BRAKESTATE_NOTSETUP				0x04
 	#define BRAKESTATE_INPUTVOLTAGEBAD      0x08
 	#define BRAKESTATE_MANUALBRAKE			0x10
-	#define BRAKESTATE_NOINPUTVOLTAGE		0x20
+	#define BRAKESTATE_LOWSUPERCAP  		0x20
 	#define BRAKESTATE_BREAKAWAYREADY		0x40
 	#define BRAKESTATE_ERRORLOADSET			0x80  //01_28 changed
 }BRAKEDATA;

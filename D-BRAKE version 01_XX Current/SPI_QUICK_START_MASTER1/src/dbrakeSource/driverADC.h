@@ -13,6 +13,8 @@
 #define ADC_INPUTVOLTAGE_10PT2   (155*102)/10
 #define ADC_INPUTVOLTAGENONE    500
 
+#define SUPERCAP_17V	2615   //0XA37
+#define SUPERCAP_17PT5	2690
 
 //---------------------GLOBAL VARIABLES--------------------------
 extern uint16_t maxCurrentRead; 

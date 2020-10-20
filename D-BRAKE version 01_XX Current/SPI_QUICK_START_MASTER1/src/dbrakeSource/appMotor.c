@@ -368,6 +368,8 @@ void BrakeLEDControl(void)
 	// what should the bi color LED be doing?
 	// 1. flash red for the following errors: 
 	//    a. brakeStatus.BrakeState |= BRAKESTATE_INPUTVOLTAGEBAD;	
+	if (poweredUp != 0)
+	{
 	switch (brakeState)
 	{
 		case BRAKESTATE_POWERINGUP:
@@ -393,7 +395,7 @@ void BrakeLEDControl(void)
 		case BRAKESTATE_WAITONSETUPLOADCELL:
 		{
 			//v01_57
-			if ((brakeStatus.BrakeState & BRAKESTATE_NOINPUTVOLTAGE)!= 0)
+			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 			{
 				brakeBiLED = BRAKEBILED_YELLOWFLASH;
 				brakeBlueLED = BRAKEBLUELED_OFF;
@@ -430,7 +432,7 @@ void BrakeLEDControl(void)
 		case BRAKESTATE_SETUPACTIVE:
 		{
 			//v01_57
-			if ((brakeStatus.BrakeState & BRAKESTATE_NOINPUTVOLTAGE)!= 0)
+			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 			{
 				brakeBiLED = BRAKEBILED_YELLOWFLASH;
 				brakeBlueLED = BRAKEBLUELED_OFF;
@@ -449,7 +451,7 @@ void BrakeLEDControl(void)
 		case BRAKESTATE_HOLDOFF_ACTIVE:
 		{
 			brakeBiLED = BRAKEBILED_GREENSOLID;
-			if ((brakeStatus.BrakeState & BRAKESTATE_NOINPUTVOLTAGE)!= 0)
+			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 			{
 				brakeBiLED = BRAKEBILED_YELLOWFLASH;
 			}
@@ -496,9 +498,10 @@ void BrakeLEDControl(void)
 			break;
 		} 
 	}
+	}
 }
 
-
+uint16_t currentvalue;
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 // FUNCTION:
 //------------------------------------------------------------------------------
@@ -507,22 +510,30 @@ void BrakeLEDControl(void)
 //==============================================================================
 void BrakeSupervisorytask(void)
 {
-	uint16_t currentvalue;
+
 	
 	//--------------------------------
 	// check voltages
 	currentvalue = ADCGetReading(ADC_INPUT_VOLTAGE);
 	supercapValue = ADCGetReading(ADC_INPUT_SUPERCAP);		
-	if (currentvalue< ADC_INPUTVOLTAGE_10PT2)  //ADC_INPUTVOLTAGE_8)
+	if (currentvalue< ADC_INPUTVOLTAGE_8PT5)  //ADC_INPUTVOLTAGE_8)
 	{
-		if ((fastVoltageBadTime >= VOLTAGE_BAD_TIME)&&
-			    ((brakeState == BRAKESTATE_PRESETUP0)||(brakeState == BRAKESTATE_PRESETUP)))
+		if ((fastVoltageBadTime >= VOLTAGEFAST_BAD_TIME)&&
+		((brakeState == BRAKESTATE_PRESETUP0)||
+		(brakeState == BRAKESTATE_WAITONSETUP)||
+		(brakeState == BRAKESTATE_PRESETUP)||
+		(brakeState == BRAKESTATE_POWERINGUP)||
+		(brakeState == BRAKESTATE_POWEREDUP)||
+		(brakeState == BRAKESTATE_POWEREDUP0)))
 		{
 			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)== 0)
 			{
 				brakeStatus.BrakeState |= BRAKESTATE_INPUTVOLTAGEBAD;
 			}
-		}		
+		}	
+	}
+	if (currentvalue< ADC_INPUTVOLTAGE_10PT2)  //ADC_INPUTVOLTAGE_8)
+	{
 		if (voltageBadTime >= VOLTAGE_BAD_TIME)
 		{
 			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)== 0)
@@ -530,19 +541,15 @@ void BrakeSupervisorytask(void)
 				brakeStatus.BrakeState |= BRAKESTATE_INPUTVOLTAGEBAD;
 			}
 		}
-		if (currentvalue < ADC_INPUTVOLTAGENONE)
-		{
-			brakeStatus.BrakeState |= BRAKESTATE_NOINPUTVOLTAGE;
-		}
 	}
 	else
 	{
-		brakeStatus.BrakeState &= ~BRAKESTATE_NOINPUTVOLTAGE;
 		if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 		{
 			if ((currentvalue> ADC_INPUTVOLTAGE_8PT5)&&(supercapValue > 0x800))
 			{
 				brakeStatus.BrakeState &= ~BRAKESTATE_INPUTVOLTAGEBAD;	
+				brakeStatus.BrakeState &= ~BRAKESTATE_LOWSUPERCAP;	
 			}
 		}
 		else
@@ -554,53 +561,49 @@ void BrakeSupervisorytask(void)
 	//-----------------------------------------
 	// if voltage is over 10.5 volts and board is turned on - 
 	// enable the super cap. 
-//	if ((brakeState != BRAKESTATE_IDLESLEEP)&&(brakeState != BRAKESTATE_POWERINGUP))
-//	{
-		
-		if (currentvalue> ADC_INPUTVOLTAGE_10PT5)
-		{	
-			//----------------boc //01_38_#2
-
-			if (chargingSupercap == 0)
-			{
-				if (supercapValue < 0xada)
-				{
-					port_pin_set_output_level(SUPERCAPEN, true);  
-					chargingSupercap = 1;   
-				}
-			}
-			else
-			{
-				if (supercapValue > 0xb47)
-				{
-					port_pin_set_output_level(SUPERCAPEN, false);
-					chargingSupercap = 0;   
-				}		
-			}
-		}
-		else
-		{
-			if (currentvalue< ADC_INPUTVOLTAGE_10PT2)
-			{
-				if (chargingSupercap != 0)
-				{				
-					port_pin_set_output_level(SUPERCAPEN, false);
-					chargingSupercap = 0;
-				}
-				if (supercapValue < 0x0400)
-				{
-					brakeStatus.BrakeState |= BRAKESTATE_NOINPUTVOLTAGE;					
-				}				
-			}
-		}
+	if (currentvalue> ADC_INPUTVOLTAGE_10PT5)
+	{	
+		//----------------boc //01_38_#2
 		if (chargingSupercap == 0)
 		{
-			port_pin_set_output_level(SUPERCAPEN, false);  		
+			if (supercapValue < SUPERCAP_17V)
+			{
+				port_pin_set_output_level(SUPERCAPEN, true);  
+				chargingSupercap = 1;   
+			}
 		}
 		else
 		{
-			port_pin_set_output_level(SUPERCAPEN, true);  		
-		}		
+			if (supercapValue > SUPERCAP_17PT5)
+			{
+				port_pin_set_output_level(SUPERCAPEN, false);
+				chargingSupercap = 0;   
+			}		
+		}
+	}
+	else
+	{
+		if (currentvalue< ADC_INPUTVOLTAGE_10PT2)
+		{
+			if (chargingSupercap != 0)
+			{				
+				port_pin_set_output_level(SUPERCAPEN, false);
+				chargingSupercap = 0;
+			}
+			if (supercapValue < 0x0400)
+			{
+				brakeStatus.BrakeState |= BRAKESTATE_LOWSUPERCAP;					
+			}				
+		}
+	}
+	if (chargingSupercap == 0)
+	{
+		port_pin_set_output_level(SUPERCAPEN, false);  		
+	}
+	else
+	{
+		port_pin_set_output_level(SUPERCAPEN, true);  		
+	}		
 }
 
 uint16_t newCurrentThreshold; 
@@ -689,7 +692,7 @@ void BrakeBoardStateMachineTask(void)
 			MotorOff(1);
 			brakeState = BRAKESTATE_POWEREDUP;
 			encoderCountBack =0;
-			if ((brakeStatus.BrakeState & (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE))!= 0)
+			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 			{
 				brakeState = BRAKESTATE_ERROR_RETRACT;
 			}	
@@ -707,7 +710,7 @@ void BrakeBoardStateMachineTask(void)
 					brakeChange &= ~BRAKECHANGE_SUPTIME;
 				}
 			}
-			brakeStatus.BrakeState &= (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE); 
+			brakeStatus.BrakeState &= (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_LOWSUPERCAP); 
 			break;
 		}
 //v00_20 added the POWEREDUP0 state to handle a short extension first		
@@ -721,7 +724,7 @@ void BrakeBoardStateMachineTask(void)
 				brakeSupTime = 150;  //15 seconds to retract
 				brakeChange &= ~BRAKECHANGE_SUPTIME;
 			}
-			brakeStatus.BrakeState &= (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE); 
+			brakeStatus.BrakeState &= (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_LOWSUPERCAP); 
 			break;
 		}		
 		case BRAKESTATE_POWEREDUP:
@@ -748,14 +751,10 @@ void BrakeBoardStateMachineTask(void)
 //------------------------------------		
 		case BRAKESTATE_RESET:
 		{
-//v01_11			poweredUp = 1;
 			motorAccBaseline = 0; 
 			thresholdmet = 0; 
 			breakawayHoldTimer = 0; 
-
-			brakeStatus.ActuatorStatus = 0; 
 			brakeState = BRAKESTATE_PRESETUP;
-			brakeStatus.BrakeState = 0; 
 #if TESTWITHOUTSETUP
 #else		
 			brakeStatus.BrakeState |= BRAKESTATE_NOTSETUP;	
@@ -791,9 +790,7 @@ void BrakeBoardStateMachineTask(void)
 			switchToFSK = FALSE; 
 			CommInit();
 			wdt_reset_count();
-			//-------RF433--- pressure sensor radio
-//disabled for now			RF433Init();			
-			
+
 			system_interrupt_enable_global();
 			ADCStart();
 			//------------------
@@ -808,7 +805,7 @@ void BrakeBoardStateMachineTask(void)
 			
 //--- V01_20 added short extend for new setup		
 			MotorOff(1);
-			if ((brakeStatus.BrakeState & (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE))!= 0)
+			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 			{
 				brakeState = BRAKESTATE_ERROR_RETRACT;
 			}	
@@ -832,7 +829,7 @@ void BrakeBoardStateMachineTask(void)
 			if (((brakeChange & BRAKECHANGE_SUPTIME)!= 0)||(encoderCountBack==0))
 			{
 				MotorOff(1);		
-				if ((brakeStatus.BrakeState & (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE))!= 0)
+			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 				{
 					brakeState = BRAKESTATE_ERROR_RETRACT;
 				}
@@ -855,7 +852,7 @@ void BrakeBoardStateMachineTask(void)
 				MotorOff(1);
 				brakeSupTime = 0;
 				brakeChange &= ~BRAKECHANGE_SUPTIME;
-				if ((brakeStatus.BrakeState & (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE))!= 0)
+							if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 				{
 					brakeState = BRAKESTATE_ERROR_RETRACT;
 				}
@@ -898,7 +895,7 @@ void BrakeBoardStateMachineTask(void)
 			//---- eoc V01_23 
 			{
 				//v01_56 add to check if input voltage is present. 
-				if ((brakeStatus.BrakeState & BRAKESTATE_NOINPUTVOLTAGE)== 0)
+				if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)== 0)
 				{
 					brakeState = BRAKESTATE_WAITONSETUP;
 					if (setup_pressed != 0)
@@ -925,7 +922,7 @@ void BrakeBoardStateMachineTask(void)
 // been started from the WAITONSETUP state. 		
 		case BRAKESTATE_SETUPACTIVE_PAUSE_EXTEND:
 		{
-			if ((brakeStatus.BrakeState & (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE))!= 0)
+						if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 			{
 				brakeState = BRAKESTATE_ERROR_RETRACT;
 			}	
@@ -946,7 +943,7 @@ void BrakeBoardStateMachineTask(void)
 		}
 		case BRAKESTATE_SETUPACTIVE_PAUSE_RETRACT:
 		{
-			if ((brakeStatus.BrakeState & (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE))!= 0)
+						if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 			{
 				brakeState = BRAKESTATE_ERROR_RETRACT;
 			}			
@@ -1109,7 +1106,7 @@ void BrakeBoardStateMachineTask(void)
 											brakeState = BRAKESTATE_SETUPACTIVE_END; //BRAKESTATE_HOLDOFF_ACTIVEFROMSETUP;
 											MotorOff(1);
 											brakeSupTime =BRAKESUPTIME;   
-											if ((brakeStatus.BrakeState & (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE))!= 0)
+														if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 											{
 												brakeState = BRAKESTATE_ERROR_RETRACT;
 											}
@@ -1305,7 +1302,10 @@ void BrakeBoardStateMachineTask(void)
 			brakeStatus.BrakeState &= ~BRAKESTATE_MANUALBRAKE;
 			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)== 0)
 			{
-				brakeState = BRAKESTATE_RESET;
+				if (poweredUp != 0)
+				{
+					brakeState = BRAKESTATE_RESET;
+				}
 				done = 1;
 			}			
 			break;
@@ -1363,7 +1363,7 @@ void BrakeBoardStateMachineTask(void)
 			itemp3 = LoadCell(brakeState);
 			if (itemp3>0x60)								
 			{
-				brakeState = BRAKESTATE_ERROR_RETRACT;		
+				brakeState = BRAKESTATE_ERROR;		
 			}
 			else
 			{
@@ -2850,37 +2850,31 @@ void MotorHLimitCallback(void)
 	schedByte |= SCHEDBYTE_MOTORHLIMIT;
 	hlimitState = port_pin_get_input_level(HLIMIT);		
 	
-//	if ((brakeStatus.BrakeState & (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_NOINPUTVOLTAGE))!= 0)
-//	{
-//	}
-//	else
-//	{
-		if (hlimitState == 0)
+ 	if (hlimitState == 0)
+	{
+		if ((action != EXTENDING)&&(action !=EXTENDING_BY_ENCODER))
 		{
-			if ((action != EXTENDING)&&(action !=EXTENDING_BY_ENCODER))
-			{
-				MotorOff(0);
-				homeLimit = HOME_IN;
-			}
-			else
-			{
-				homeLimit = HOME_OUT;
-			}
+			MotorOff(0);
+			homeLimit = HOME_IN;
 		}
 		else
 		{
-			// added below logic v01_27
-			if ((action != EXTENDING)&&(action !=EXTENDING_BY_ENCODER))
-			{
-	//			MotorOff();
-				homeLimit = HOME_IN;
-			}
-			else
-			{
-				homeLimit = HOME_OUT;
-			}
+			homeLimit = HOME_OUT;
 		}
-//	}
+	}
+	else
+	{
+		// added below logic v01_27
+		if ((action != EXTENDING)&&(action !=EXTENDING_BY_ENCODER))
+		{
+//			MotorOff();
+			homeLimit = HOME_IN;
+		}
+		else
+		{
+			homeLimit = HOME_OUT;
+		}
+	}
 }
 
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

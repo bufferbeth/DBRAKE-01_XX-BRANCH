@@ -694,7 +694,11 @@ int main(void)
 					if (schedCount ==6)
 					{
 						BrakeBoardStateMachineTask();
-					}					
+					}		
+					if (schedCount ==5)
+					{
+						ADCTask();
+					}								
 					if (schedCount ==3)
 					{
 						ButtonSample();

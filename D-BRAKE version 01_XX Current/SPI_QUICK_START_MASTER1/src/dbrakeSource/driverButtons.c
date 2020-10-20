@@ -322,7 +322,8 @@ void ButtonSample(void)
 					if (poweredUp == 0)
 					{
 						poweredUp = 1;
-						MotorOff(1);  //added in v01_20						
+						MotorOff(1);  //added in v01_20			
+						brakeStatus.BrakeState &= ~(BRAKESTATE_INPUTVOLTAGEBAD&BRAKESTATE_LOWSUPERCAP); 			
 						brakeState = BRAKESTATE_RESET;
 						BrakeBoardStateMachineTask();	
 					}

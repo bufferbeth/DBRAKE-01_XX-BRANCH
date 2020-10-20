@@ -129,7 +129,8 @@ extern uint16_t breakawayHoldTimer;
 	//---------------------------
 extern uint16_t fastVoltageBadTime; 	
 extern uint16_t voltageBadTime;
-#define VOLTAGE_BAD_TIME	30 
+#define VOLTAGE_BAD_TIME	5   //30 
+#define VOLTAGEFAST_BAD_TIME 25
  
 #define DITHER_TIME 1000
 extern uint16_t ditherTimer; 
