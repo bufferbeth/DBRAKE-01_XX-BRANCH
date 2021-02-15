@@ -121,7 +121,8 @@ src/dbrakeSource/driverUSART.d src/dbrakeSource/driverUSART.o: \
  ../src/dbrakeSource/dbrakeDefs.h ../src/dbrakeSource/appBluetooth.h \
  ../src/dbrakeSource/driverUSART.h \
  ../src/dbrakeSource/driverProgramming.h \
- ../src/dbrakeSource/appProtocol.h ../src/dbrakeSource/driverTSPI.h
+ ../src/dbrakeSource/appProtocol.h ../src/dbrakeSource/driverTSPI.h \
+ ../src/dbrakeSource/appMotor.h ../src/dbrakeSource/appEncoder.h
 
 ../src/asf.h:
 
@@ -386,3 +387,7 @@ c:\program\ files\ (x86)\atmel\atmel\ toolchain\arm\ gcc\native\4.8.1443\arm-gnu
 ../src/dbrakeSource/appProtocol.h:
 
 ../src/dbrakeSource/driverTSPI.h:
+
+../src/dbrakeSource/appMotor.h:
+
+../src/dbrakeSource/appEncoder.h:

@@ -147,6 +147,7 @@ void MotorExtendMore(void);
 void MotorNeedNewBaseline(void);
 uint16_t CurrentMotorCalculatedStartup(uint8_t forceMax);
 uint16_t FsrMotorCalculatedStartup(uint8_t forceMax);
+void ActiveLoadState(uint8_t enteringInState);
 	
 //XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX
 // ---------------------------GLOBAL FUNCTIONS ----------------------------------
@@ -202,12 +203,6 @@ uint16_t LoadCell(uint8_t whichState)
 	{
 		value = itemp;
 	}
-	
-//V01.30	if (value >4000)
-//V01.30	{
-//V01.30		value = 0; 
-//V01.30	}
-// testing only 	value = testValue; 
 	return value;
 }
 
@@ -451,7 +446,8 @@ void BrakeLEDControl(void)
 		case BRAKESTATE_HOLDOFF_ACTIVE:
 		{
 			brakeBiLED = BRAKEBILED_GREENSOLID;
-			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
+			if (((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)||
+			    ((brakeStatus.BrakeState & BRAKESTATE_ERRORLOADSET)!=0))
 			{
 				brakeBiLED = BRAKEBILED_YELLOWFLASH;
 			}
@@ -502,6 +498,18 @@ void BrakeLEDControl(void)
 }
 
 uint16_t currentvalue;
+
+void TestSend(void)
+{
+#if TESTUARTDATA	
+	currentvalue = ADCGetReading(ADC_INPUT_VOLTAGE);
+	UsartSendData(currentvalue);
+#endif	
+}
+
+#if TEST_BRAKE_SUP
+uint8_t btimerToggle; 
+#endif 
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 // FUNCTION:
 //------------------------------------------------------------------------------
@@ -511,12 +519,26 @@ uint16_t currentvalue;
 void BrakeSupervisorytask(void)
 {
 
-	
+#if TEST_BRAKE_SUP
+//-------------
+// CLK_FIX
+if (btimerToggle != 0)
+{
+	btimerToggle = 0;
+	port_pin_set_output_level(PIN_PB22, FALSE); //CLK_FIX
+}
+else
+{
+	btimerToggle = 1;
+	port_pin_set_output_level(PIN_PB22, TRUE); //CLK_FIX
+}
+#endif	
 	//--------------------------------
 	// check voltages
 	currentvalue = ADCGetReading(ADC_INPUT_VOLTAGE);
 	supercapValue = ADCGetReading(ADC_INPUT_SUPERCAP);		
-	if (currentvalue< ADC_INPUTVOLTAGE_8PT5)  //ADC_INPUTVOLTAGE_8)
+	UsartSendData(currentvalue);
+	if (currentvalue< ADC_INPUTVOLTAGE_ERROR)  //ADC_INPUTVOLTAGE_8)
 	{
 		if ((fastVoltageBadTime >= VOLTAGEFAST_BAD_TIME)&&
 		((brakeState == BRAKESTATE_PRESETUP0)||
@@ -532,7 +554,12 @@ void BrakeSupervisorytask(void)
 			}
 		}	
 	}
-	if (currentvalue< ADC_INPUTVOLTAGE_10PT2)  //ADC_INPUTVOLTAGE_8)
+	else
+	{	
+		fastVoltageBadTime = 0; 	
+	}
+	
+	if (currentvalue< ADC_INPUTVOLTAGE_ERRORSTART)
 	{
 		if (voltageBadTime >= VOLTAGE_BAD_TIME)
 		{
@@ -546,17 +573,16 @@ void BrakeSupervisorytask(void)
 	{
 		if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 		{
-			if ((currentvalue> ADC_INPUTVOLTAGE_8PT5)&&(supercapValue > 0x800))
+//			if ((currentvalue> ADC_INPUTVOLTAGE_8PT5)&&
+			if ((currentvalue> ADC_INPUTVOLTAGE_RECOVER)&&			
+			   ((supercapValue > 0x800)||(brakeState == BRAKESTATE_IDLESLEEP)))
 			{
 				brakeStatus.BrakeState &= ~BRAKESTATE_INPUTVOLTAGEBAD;	
 				brakeStatus.BrakeState &= ~BRAKESTATE_LOWSUPERCAP;	
 			}
 		}
-		else
-		{
-			voltageBadTime = 0; 
-			fastVoltageBadTime = 0; 
-		}
+		voltageBadTime = 0; 
+		fastVoltageBadTime = 0; 
 	}
 	//-----------------------------------------
 	// if voltage is over 10.5 volts and board is turned on - 
@@ -625,13 +651,6 @@ void BrakeBoardStateMachineTask(void)
 	uint8_t i,done,button,itemp,forceExtend;
 	uint16_t itemp2,itemp3;
 
-//----- boc 01_38_#3	
-	prevBrakeState2 = prevBrakeState;
-	prevBrakeState = brakeState; 
-	if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
-	{
-//		brakeState = BRAKESTATE_ERROR_RETRACT;
-	}	
 	//-----------------
 	// if action is EXTENDING OR RETRACTING
 	// check that encoder count is changing. 
@@ -668,7 +687,7 @@ void BrakeBoardStateMachineTask(void)
 //	table0.Item.MaxForce = 5;  //hard coded for testing
 	done = 0;
 	button = ButtonChanged();
-	BrakeSupervisorytask();
+//	BrakeSupervisorytask();
 	if (breakawayRing_pressed == 1)
 	{
 		brakeStatus.BrakeState |= BRAKESTATE_BREAKAWAYREADY;
@@ -716,15 +735,22 @@ void BrakeBoardStateMachineTask(void)
 //v00_20 added the POWEREDUP0 state to handle a short extension first		
 		case BRAKESTATE_POWEREDUP0:
 		{
-			if (((brakeChange & BRAKECHANGE_SUPTIME)!= 0)||(encoderCountBack ==0))
+			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 			{
-				MotorOff(1);
-				brakeState = BRAKESTATE_POWEREDUP;
-				MotorCCW();
-				brakeSupTime = 150;  //15 seconds to retract
-				brakeChange &= ~BRAKECHANGE_SUPTIME;
+				brakeState = BRAKESTATE_ERROR_RETRACT;
 			}
-			brakeStatus.BrakeState &= (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_LOWSUPERCAP); 
+			else
+			{		
+				if (((brakeChange & BRAKECHANGE_SUPTIME)!= 0)||(encoderCountBack ==0))
+				{
+					MotorOff(1);
+					brakeState = BRAKESTATE_POWEREDUP;
+					MotorCCW();
+					brakeSupTime = 150;  //15 seconds to retract
+					brakeChange &= ~BRAKECHANGE_SUPTIME;
+				}
+				brakeStatus.BrakeState &= (BRAKESTATE_INPUTVOLTAGEBAD|BRAKESTATE_LOWSUPERCAP); 
+			}
 			break;
 		}		
 		case BRAKESTATE_POWEREDUP:
@@ -825,16 +851,15 @@ void BrakeBoardStateMachineTask(void)
 //----- V01_20 below state added 		
 		case BRAKESTATE_PRESETUP0:
 		{
-
-			if (((brakeChange & BRAKECHANGE_SUPTIME)!= 0)||(encoderCountBack==0))
-			{
-				MotorOff(1);		
 			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
+			{
+				brakeState = BRAKESTATE_ERROR_RETRACT;
+			}
+			else
+			{
+				if (((brakeChange & BRAKECHANGE_SUPTIME)!= 0)||(encoderCountBack==0))
 				{
-					brakeState = BRAKESTATE_ERROR_RETRACT;
-				}
-				else
-				{				
+					MotorOff(1);				
 					brakeState = BRAKESTATE_PRESETUP;
 					MotorCCW();
 					brakeSupTime = 150;  //5 seconds to retract
@@ -852,7 +877,7 @@ void BrakeBoardStateMachineTask(void)
 				MotorOff(1);
 				brakeSupTime = 0;
 				brakeChange &= ~BRAKECHANGE_SUPTIME;
-							if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
+				if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 				{
 					brakeState = BRAKESTATE_ERROR_RETRACT;
 				}
@@ -1270,8 +1295,7 @@ void BrakeBoardStateMachineTask(void)
 			itemp3 = LoadCell(brakeState);
 			if (itemp3<0x60)								
 			{
-     			brakeState = BRAKESTATE_ACTIVELOAD;
-		//v01_29		brakeState = BRAKESTATE_ACTIVE;				
+     			brakeState = BRAKESTATE_ACTIVELOAD;			
 				brakeSupTime = 0;
 				brakeChange &= ~BRAKECHANGE_SUPTIME;
 
@@ -1282,8 +1306,10 @@ void BrakeBoardStateMachineTask(void)
 				{
 					brakeStatus.BrakeState |= BRAKESTATE_NOTSETUP;
 					brakeStatus.BrakeState |= BRAKESTATE_ERRORLOADSET;  //V01_28 added 
-					brakeState = BRAKESTATE_ERROR;			
+//					brakeState = BRAKESTATE_ERROR;		
+					MotorOff(0);	
 				}
+				ActiveLoadState(brakeState);
 			}
 			break;
 		}
@@ -1410,7 +1436,7 @@ void BrakeBoardStateMachineTask(void)
 							brakeStatus.BrakeState &= ~BRAKESTATE_NOTSETUP;
 							brakeState = BRAKESTATE_HOLDOFF_ACTIVE;
 							MotorOff(1);		
-							brakeSupTime = BRAKESUPTIME;	
+							brakeSupTime = BRAKESUPTIME_SHORT;	
 							//------------v1.05 boc
 							brakeInitiationCount = 0;
 							brakeCycleCount = 0;
@@ -1470,107 +1496,12 @@ void BrakeBoardStateMachineTask(void)
 				brakeState = BRAKESTATE_ERRORLOAD;
 				done = 1; 									
 			}
-			
-			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
-			{
-				brakeState = BRAKESTATE_ERROR_VOLTAGE_ACTIVE; 
-				done = 1; 
-			}					
-			//---------------------check for breakaway
-			if ((breakawayRing_pressed == 0) || 
-			   ((breakawayRing_pressed ==1) && (breakawayTip_pressed ==0)))
-			{
-				brakeStatus.BrakeState &= ~BRAKESTATE_BREAKAWAYTIP;
-			}								
- 			if ((breakawayTip_pressed!=0)&&(breakawayRing_pressed != 0)&&
-			        (breakawayHoldTimer ==0))
-			{
-				breakawayHoldTimer = 1; 
-			}
- 			if ((breakawayTip_pressed!=0)&&(breakawayRing_pressed != 0)&&(done==0)&& //v1_23 added the done here
-			        (breakawayHoldTimer >= BREAKAWAY_HOLD_TIME)&&((brakeStatus.BrakeState &BRAKESTATE_BREAKAWAYTIP)==0))
-			{
-				done = 1;
-				brakeStatus.BrakeState |= BRAKESTATE_BREAKAWAYTIP;
-				brakeState = BRAKESTATE_ACTIVE_EXTEND_BREAKAWAY;
-				MotorCW();
-				brakeSupTime = BRAKESUPTIME;
-				brakeChange &= ~BRAKECHANGE_SUPTIME;
-				thresholdmet = 0;
-			}			
-			//---------------------check for manual
-			if ((remoteStatus & REMOTE_MANUALBRAKE_ACTIVE) == 0)
-			{
-				brakeStatus.BrakeState &= ~BRAKESTATE_MANUALBRAKE;
-			}			
-			if (done == 0)
-			{
-				if (((remoteStatus & REMOTE_MANUALBRAKE_ACTIVE)!=0)&&
-				       ((brakeStatus.BrakeState & BRAKESTATE_MANUALBRAKE)==0))
-				{
- 					done = 1;
-					brakeStatus.BrakeState |= BRAKESTATE_MANUALBRAKE;
-					brakeState = BRAKESTATE_ACTIVE_EXTEND_MANUAL;
-					//------------v1.05 boc
-					if (brakeInitiationCount <10)
-					{
-						brakeInitiationCount++;
-					}
-					//--------------v1.05 eoc
-					MotorCW();
-					brakeSupTime = BRAKESUPTIME;
-					brakeChange &= ~BRAKECHANGE_SUPTIME;
-				}
-			}					
-			//------------------------
-			// check accelerometer. 
-			if (done==0)
-			{
-				tempdiffx = MotorGetAcc(FALSE);
-				itemp2 = table0.Item.SensitivitySet;;
-				if (itemp2 >9)
-				{
-					itemp2 = 0;
-				}
-				itemp2 = itemp2 * ACC_THRESHOLD_MULTIPLIER;
-				itemp2 = itemp2 + ACC_SIXTEENTHS_G;
-			    if (AccelProvideDecisions(itemp2,DECISION_GREATER,motorAccXBaseline)!=0) //V062 was ACC_SIXTEENTHS_G
-				{
-					thresholdmet++; 
-//					if (thresholdmet >= MAX_THRESHOLD_NEEDED)
-//					{
-						done = 1; 
-						thresholdmet = MAX_THRESHOLD_NEEDED;
-						brakeState = BRAKESTATE_ACTIVE_EXTEND;
-						//------------v1.05 boc
-						if (brakeInitiationCount <10)
-						{
-							brakeInitiationCount++;
-						}
-						//--------------v1.05 eoc						
-						//----------------------------------
-						// EXTEND - 
-						// 1. set max time to 5 seconds
-						// 2. set hold max time to 15 seconds 						
-						MotorCW();
-						thresholdmet = 0;   //01_39_#1
-						brakeSupTime = BRAKESUPTIME;
-						brakeChange &= ~BRAKECHANGE_SUPTIME;											
-//					}
-				}
-				else
-				{
-					thresholdmet = 0; 
-				}
-			} 			
 			else
 			{
-				thresholdmet = 0;				
+				ActiveLoadState(brakeState);
 			}
-
 			break;
 		}		
-
 //------------------------- 
 // ACTIVE EXTEND STATE 
 //-------------------------		
@@ -1623,6 +1554,7 @@ void BrakeBoardStateMachineTask(void)
  					MotorCCW();
 					brakeSupTime = BRAKESUPTIME;
 					brakeState = BRAKESTATE_END_RETRACT_TIMEOUT;
+//					MotorNeedNewBaseline();  //01_89
 				}
 				brakeChange &= ~BRAKECHANGE_SUPTIME;
 			}			
@@ -1950,9 +1882,17 @@ void BrakeBoardStateMachineTask(void)
 					{
 						brakeSupTime = BRAKESUPTIME_TIMEOUT;	
 					}
-//					MotorNeedNewBaseline();
+
 					brakeState = BRAKESTATE_HOLDOFF_ACTIVE;
-					
+					MotorNeedNewBaseline();
+//					if (prevBrakeState !=BRAKESTATE_ERRORLOADWAIT )
+//					{
+						brakeState = BRAKESTATE_HOLDOFF_ACTIVE;
+//					}
+//					else
+//					{
+//						brakeState = BRAKESTATE_ERRORLOADWAIT;
+//					}					
 					if ((remoteStatus & REMOTE_MANUALBRAKE_ACTIVE) == 0)
 					{
 						brakeStatus.BrakeState &= ~BRAKESTATE_MANUALBRAKE;
@@ -1978,8 +1918,16 @@ void BrakeBoardStateMachineTask(void)
 						{
 							brakeSupTime = BRAKESUPTIME_TIMEOUT;	
 						}		
-//						MotorNeedNewBaseline();				
-						brakeState = BRAKESTATE_HOLDOFF_ACTIVE;
+//						if (prevBrakeState !=BRAKESTATE_ERRORLOADWAIT )	
+//						{		
+							brakeState = BRAKESTATE_HOLDOFF_ACTIVE;
+							MotorNeedNewBaseline();
+//						}
+//						else
+//						{
+//							brakeState = BRAKESTATE_ERRORLOADWAIT;
+//						}
+						
 						if ((remoteStatus & REMOTE_MANUALBRAKE_ACTIVE) == 0)
 						{
 							brakeStatus.BrakeState &= ~BRAKESTATE_MANUALBRAKE;
@@ -2280,6 +2228,124 @@ void BrakeBoardStateMachineTask(void)
 	}
 	BrakeLEDControl();
 }
+
+//xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+// FUNCTION: ActiveLoadState
+//------------------------------------------------------------------------------
+// This function
+//
+//==============================================================================			
+void ActiveLoadState(uint8_t enteringInState)
+{
+	uint8_t done; 
+	uint16_t itemp2,itemp3;	
+	done = 0; 
+	prevBrakeState = 0; 
+	
+	if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
+	{
+		brakeState = BRAKESTATE_ERROR_VOLTAGE_ACTIVE;
+		done = 1;
+	}
+	//---------------------check for breakaway
+	if ((breakawayRing_pressed == 0) ||
+	((breakawayRing_pressed ==1) && (breakawayTip_pressed ==0)))
+	{
+		brakeStatus.BrakeState &= ~BRAKESTATE_BREAKAWAYTIP;
+	}
+	if ((breakawayTip_pressed!=0)&&(breakawayRing_pressed != 0)&&
+	(breakawayHoldTimer ==0))
+	{
+		breakawayHoldTimer = 1;
+	}
+	if ((breakawayTip_pressed!=0)&&(breakawayRing_pressed != 0)&&(done==0)&& //v1_23 added the done here
+		(breakawayHoldTimer >= BREAKAWAY_HOLD_TIME)&&((brakeStatus.BrakeState &BRAKESTATE_BREAKAWAYTIP)==0))
+	{
+		done = 1;
+		brakeStatus.BrakeState |= BRAKESTATE_BREAKAWAYTIP;
+		brakeState = BRAKESTATE_ACTIVE_EXTEND_BREAKAWAY;
+		prevBrakeState = enteringInState;
+		MotorCW();
+		brakeSupTime = BRAKESUPTIME;
+		brakeChange &= ~BRAKECHANGE_SUPTIME;
+		thresholdmet = 0;
+	}
+	//---------------------check for manual
+	if ((remoteStatus & REMOTE_MANUALBRAKE_ACTIVE) == 0)
+	{
+		brakeStatus.BrakeState &= ~BRAKESTATE_MANUALBRAKE;
+	}
+	if (done == 0)
+	{
+		if (((remoteStatus & REMOTE_MANUALBRAKE_ACTIVE)!=0)&&
+		((brakeStatus.BrakeState & BRAKESTATE_MANUALBRAKE)==0))
+		{
+			done = 1;
+			brakeStatus.BrakeState |= BRAKESTATE_MANUALBRAKE;
+			brakeState = BRAKESTATE_ACTIVE_EXTEND_MANUAL;
+			prevBrakeState = enteringInState;			
+			//------------v1.05 boc
+			if (brakeInitiationCount <10)
+			{
+				brakeInitiationCount++;
+			}
+			//--------------v1.05 eoc
+			MotorCW();
+			brakeSupTime = BRAKESUPTIME;
+			brakeChange &= ~BRAKECHANGE_SUPTIME;
+		}
+	}
+	//------------------------
+	// check accelerometer.
+	if (done==0)
+	{
+		tempdiffx = MotorGetAcc(FALSE);
+		itemp2 = table0.Item.SensitivitySet;;
+		if (itemp2 >9)
+		{
+			itemp2 = 0;
+		}
+		itemp2 = itemp2 * ACC_THRESHOLD_MULTIPLIER;
+		itemp2 = itemp2 + ACC_SIXTEENTHS_G;
+		if (AccelProvideDecisions(itemp2,DECISION_GREATER,motorAccXBaseline)!=0) //V062 was ACC_SIXTEENTHS_G
+		{
+			thresholdmet++;
+			//					if (thresholdmet >= MAX_THRESHOLD_NEEDED)
+			//					{
+			done = 1;
+			thresholdmet = MAX_THRESHOLD_NEEDED;
+			brakeState = BRAKESTATE_ACTIVE_EXTEND;
+			prevBrakeState = enteringInState;
+			//------------v1.05 boc
+			if (brakeInitiationCount <10)
+			{
+				brakeInitiationCount++;
+			}
+			//--------------v1.05 eoc
+			//----------------------------------
+			// EXTEND -
+			// 1. set max time to 5 seconds
+			// 2. set hold max time to 15 seconds
+			MotorCW();
+			thresholdmet = 0;   //01_39_#1
+			brakeSupTime = BRAKESUPTIME;
+			brakeChange &= ~BRAKECHANGE_SUPTIME;
+			//					}
+		}
+		else
+		{
+			thresholdmet = 0;
+		}
+	}
+	else
+	{
+		thresholdmet = 0;
+	}
+}
+			 
+
+
+
 
 //XXXXXXXXXXXXXXXXXXXXXXXXX DEACCELERATION DETECTION XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX 
 int16_t motorTempDiffx = 0;

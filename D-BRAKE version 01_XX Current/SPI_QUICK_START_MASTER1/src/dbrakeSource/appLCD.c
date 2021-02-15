@@ -2005,14 +2005,18 @@ void AppScreenUpdateHome(void)
 		((brakeState == BRAKESTATE_ERROR)||(brakeState == BRAKESTATE_ERROR_FINAL)||
 		(brakeState == BRAKESTATE_ERROR_VOLTAGE_ACTIVE)||
 		(brakeState == BRAKESTATE_ERROR_RETRACT_LOWVOLTAGE)||
-		(brakeState == BRAKESTATE_ERROR_RETRACT)))
+		(brakeState == BRAKESTATE_ERROR_RETRACT)||
+		((brakeStatus.BrakeState & BRAKESTATE_ERRORLOADSET)!=0)))
 	{
 		//V01_28 --- added the conditional
 		if ((brakeStatus.BrakeState & BRAKESTATE_ERRORLOADSET)==0)
 		{
 			BacklightSetColor(5);
 		}
-		
+		else
+		{
+			BacklightSetColor(4);
+		}		
 		if ((appScreen == SCREEN_HOME)&&(appScreenHomeType == SCREEN_HOME_BASE))
 		{
 		//----------------------------

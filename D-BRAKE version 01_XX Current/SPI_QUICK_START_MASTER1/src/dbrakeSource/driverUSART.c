@@ -14,6 +14,8 @@
 #include "driverUSART.h"
 #include "driverProgramming.h"
 #include "appProtocol.h"
+#include "appMotor.h"
+#include "appEncoder.h"
 
 #if BRAKEBOARD
 //---------------------GLOBAL VARIABLES----------------------------------- 
@@ -64,6 +66,72 @@ extern uint8_t receiveIntercharTimeout;
 #define COMMAND_DR 0x4452
 #define COMMAND_DC 0x4443   //second generation files - brake
 #define COMMAND_DS 0x4453	//second generation files - remote
+
+
+
+void UsartSendData(uint16_t value)
+{
+	uint16_t itemp,itemp2,itemp3,itemp4; 
+#if TESTUARTDATA	
+	itemp = value; 
+	itemp = itemp>>12;
+	if (itemp <= 9)
+	{
+		itemp |= 0x30;
+	}
+	else
+	{
+		itemp = 0x41 + (itemp-10);
+	}
+	itemp2 = value;
+	itemp2 = itemp2>>8;
+	itemp2 &= 0x0f; 
+	if (itemp2 <= 9)
+	{
+		itemp2 |= 0x30;
+	}
+	else
+	{
+		itemp2 = 0x41 + (itemp2-10);
+	}
+	itemp3 = value;
+	itemp3 = itemp3>>4;
+	itemp3 &= 0x0f;
+	if (itemp3 <= 9)
+	{
+		itemp3 |= 0x30;
+	}
+	else
+	{
+		itemp3 = 0x41 + (itemp3-10);
+	}	
+	itemp4 = value;
+	itemp4 &= 0x0f;
+	if (itemp4 <= 9)
+	{
+		itemp4 |= 0x30;
+	}
+	else
+	{
+		itemp4 = 0x41 + (itemp4-10);
+	}	
+	txBluetoothBuffer[0]='#';
+	txBluetoothBuffer[1] = 0;
+	txBluetoothBuffer[2] = 9;
+	txBluetoothBuffer[3] = 'b';
+	txBluetoothBuffer[4] = 't';
+	txBluetoothBuffer[5] = 'x';
+	txBluetoothBuffer[6] = itemp;
+	txBluetoothBuffer[7] = itemp2;
+	txBluetoothBuffer[8] = itemp3;
+	txBluetoothBuffer[9] = itemp4;
+	txBluetoothBuffer[10] = 0x0d;
+//	if ((action == EXTENDING)||(action == EXTENDING_BY_ENCODER))
+//	{
+		BTTransmit(txBluetoothBuffer,11,TRUE);
+//	}
+#endif
+}
 
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 // FUNCTION:  

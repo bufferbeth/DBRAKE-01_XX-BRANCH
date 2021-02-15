@@ -129,8 +129,8 @@ extern uint16_t breakawayHoldTimer;
 	//---------------------------
 extern uint16_t fastVoltageBadTime; 	
 extern uint16_t voltageBadTime;
-#define VOLTAGE_BAD_TIME	5   //30 
-#define VOLTAGEFAST_BAD_TIME 25
+#define VOLTAGE_BAD_TIME	5  //30 
+#define VOLTAGEFAST_BAD_TIME 50
  
 #define DITHER_TIME 1000
 extern uint16_t ditherTimer; 
@@ -149,5 +149,7 @@ void MotorInit(void);
 void BrakeBoardStateMachineTask(void);
 void BrakeInit(void);
 void MotorBuildGetAcc(void);
+void TestSend(void);
+void BrakeSupervisorytask(void);
 #endif
 #endif

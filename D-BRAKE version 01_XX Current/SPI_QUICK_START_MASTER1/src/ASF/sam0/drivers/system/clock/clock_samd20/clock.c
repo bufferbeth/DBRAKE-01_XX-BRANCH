@@ -43,7 +43,7 @@
 #include <clock.h>
 #include <conf_clocks.h>
 #include <system.h>
-#define BRAKEBOARD  1 
+#define BRAKEBOARD  1
 /**
  * \internal
  * \brief DFLL-specific data container

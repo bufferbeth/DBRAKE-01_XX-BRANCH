@@ -23,6 +23,6 @@ extern AppInfo remoteApp;
 //---------------------GLOBAL PROTOTYPES--------------------------
 void USARTDisable(void);
 void USARTEnable(void);
- 
+void UsartSendData(uint16_t value); 
 #endif
 #endif

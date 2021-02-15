@@ -131,7 +131,11 @@ void EmptyTask(void)
 typedef void swTask(void);
 swTask *const SwTaskList[16] =
 {
-	AccelProcess,	
+#if REMOTEBOARD	
+	EmptyTask, 
+#else
+	BrakeSupervisorytask,
+#endif
 
 #if REMOTEBOARD
 	AppScreenUpdateHome,
@@ -151,7 +155,11 @@ BrakeBoardStateMachineTask,
 #if REMOTEBOARD	
 	AppScreenProcessKeyChange,
 #else
+#if TESTUARTDATA
+	TestSend,
+#else
 	EmptyTask,
+#endif
 #endif	
 	PressureUpdateTask,
 	AppFskTask,
@@ -161,7 +169,7 @@ BrakeBoardStateMachineTask,
 #else	
 	EmptyTask,
 #endif	
-	EmptyTask,  //ButtonSample,
+	AccelProcess,  //ButtonSample,
 	CommSupTask,
 	DownloadDoneTask,
  
@@ -300,10 +308,11 @@ int main(void)
 	// different board hardware configuration
 	
 #if BRAKEBOARD
-//	pin_conf.direction  = PORT_PIN_DIR_OUTPUT;  //CLK_FIX
-//	port_pin_set_config(PIN_PB22, &pin_conf);   //CLK_FIX
-//	port_pin_set_output_level(PIN_PB22, FALSE); //CLK_FIX
-		
+#if (TEST_BRAKE_SUP | TEST_TIMER)
+	pin_conf.direction  = PORT_PIN_DIR_OUTPUT;  //CLK_FIX
+	port_pin_set_config(PIN_PB22, &pin_conf);   //CLK_FIX
+	port_pin_set_output_level(PIN_PB22, FALSE); //CLK_FIX
+#endif		
 	pin_conf.direction  = PORT_PIN_DIR_OUTPUT;
 	port_pin_set_config(PIN_PA12, &pin_conf);
 	port_pin_set_output_level(PIN_PA12, FALSE);
@@ -551,6 +560,18 @@ int main(void)
 	//-----------Accelerometer 
 	// Brakeboard - is i2c
 	// remoteboard is spi
+#if BRAKEBOARD
+#if (TEST_BRAKE_SUP | TEST_TIMER)
+	pin_conf.direction  = PORT_PIN_DIR_OUTPUT;  //CLK_FIX
+	port_pin_set_config(PIN_PB22, &pin_conf);   //CLK_FIX
+	port_pin_set_output_level(PIN_PB22, FALSE); //CLK_FIX
+	port_pin_set_config(PIN_PB23, &pin_conf);   //CLK_FIX
+	port_pin_set_output_level(PIN_PB23, FALSE); //CLK_FIX	
+	
+	port_pin_set_output_level(PIN_PB22, TRUE); //CLK_FIX
+	port_pin_set_output_level(PIN_PB23, TRUE); //CLK_FIX	
+#endif 	
+#endif			
 #if BRAKEBOARD	
 	AccelInit(); 
 #endif
@@ -610,7 +631,10 @@ int main(void)
 	BluetoothSleep();
 //	BluetoothMicrochipConfig();
 //	BluetoothWakeUp();	
-	 
+#if TESTUARTDATA
+	USARTEnable();
+	BluetoothWakeUp();
+#endif	 
 	nvm_get_config_defaults(&config);
 	nvm_set_config(&config);
 #if 0 
@@ -679,29 +703,42 @@ int main(void)
 				}
 				else
 				{
-					if ((schedCount ==14))
+					switch(schedCount)
 					{
-						DownloadDoneTask();
-					}
-					if ((schedCount == 13)||(schedCount==10))
-					{
-					//v 01_10
-						if (newRemoteDownloadNeeded == TRUE)
+						case 14:
 						{
-							SwTaskList[schedCount]();	
+							DownloadDoneTask();
+							break;
 						}
-					}
-					if (schedCount ==6)
-					{
-						BrakeBoardStateMachineTask();
-					}		
-					if (schedCount ==5)
-					{
-						ADCTask();
-					}								
-					if (schedCount ==3)
-					{
-						ButtonSample();
+						case 13:
+						case 10:
+						{
+							if (newRemoteDownloadNeeded == TRUE)
+							{
+								SwTaskList[schedCount]();	
+							}
+							break;
+						}
+						case 0:
+						{
+							BrakeSupervisorytask();
+							break;
+						}
+						case 6:
+						{
+							BrakeBoardStateMachineTask();
+							break;
+						}		
+						case 5:
+						{
+							ADCTask();
+							break;
+						}								
+						case 3:
+						{
+							ButtonSample();
+							break;
+						}
 					}
 					//------------------------
 					// if not powered up and 
@@ -720,13 +757,19 @@ int main(void)
 							bluetoothHoldTimer100msec = 0;
 							if(bluetoothAwake != 0)
 							{
+#if TESTUARTDATA								
+#else
 								USARTDisable();
 								BluetoothSleep();
+#endif
 							}
 							else
 							{
+#if TESTUARTDATA
+#else
 								USARTEnable();
 								BluetoothWakeUp();
+#endif
 							}
 						}
 					}
@@ -736,27 +779,6 @@ int main(void)
 					}
 
 				}
-/*				
-				if (((button & KEY_POWER)!= 0)&&(power_pressed != 0))				
- 				{
-						if (poweredUp != 0)
-						{
-							poweredUp = 0;
-							brakeState = BRAKESTATE_POWERINGUP;
-							BrakeBoardStateMachineTask();							
-						}
-						else
-						{
-							deconfigure_wdt();
-							NVIC_SystemReset();
-//							poweredUp = 1; 
-//							brakeState = BRAKESTATE_RESET;
-//							BrakeBoardStateMachineTask();							
-						}
-				
-				}
-				prevSW4 = newSW4;
-*/				
 #endif	
 			}
 			schedCount++;
@@ -1075,8 +1097,9 @@ void tc_callback_to_toggle_led(struct tc_module *const module_inst)
 #else
 	schedByte |= SCHEDBYTE_ACCELEROMETER;
 #endif
-#if BRAKEBOARD 
-	if (fastVoltageBadTime < VOLTAGE_BAD_TIME)
+#if BRAKEBOARD
+	schedByte |= SCHEDBYTE_BRAKESUP;
+	if (fastVoltageBadTime < VOLTAGEFAST_BAD_TIME)
 	{
 		fastVoltageBadTime++;
 	}
@@ -1092,18 +1115,20 @@ void tc_callback_to_toggle_led(struct tc_module *const module_inst)
 	{
 		loadTime--;
 	}	
+#if TEST_TIMER
 	//------------- 
 	// CLK_FIX
 	if (timerToggle != 0)
 	{
 		timerToggle = 0;
-//		port_pin_set_output_level(PIN_PB22, FALSE); //CLK_FIX
+		port_pin_set_output_level(PIN_PB22, FALSE); //CLK_FIX
 	}
 	else
 	{
 		timerToggle = 1;
-//		port_pin_set_output_level(PIN_PB22, TRUE); //CLK_FIX			
+		port_pin_set_output_level(PIN_PB22, TRUE); //CLK_FIX			
 	}
+#endif	
 #endif
 //-------------------
 // 25 msec tasks
@@ -1143,6 +1168,7 @@ void tc_callback_to_toggle_led(struct tc_module *const module_inst)
 	if (hundredMSec >= 100)
 	{
 #if BRAKEBOARD
+		schedByte |= SCHEDBYTE_TESTSEND;
 		if (brakeSupTime >0)
 		{
 			brakeSupTime--;
@@ -1205,6 +1231,9 @@ void tc_callback_to_toggle_led(struct tc_module *const module_inst)
 	timerSecond++;
 	if (timerSecond >= 1000)
 	{
+#if BRAKEBOARD
+//		schedByte |= SCHEDBYTE_TESTSEND;
+#endif				
 		timerSecond = 0;
 		minute++;
 		if (minute >= 60)

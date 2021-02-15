@@ -26,9 +26,12 @@ extern "C" {
 #define TRUE 1
 #define FALSE 0
 
+#define TESTUARTDATA 0
 #define BLUETOOTH_TEST 0	 
 #define REMOTEBOARD 0
 #define BRAKEBOARD  1
+#define TEST_TIMER 0
+#define TEST_BRAKE_SUP 0
 #define FSRTEST 1
 #define FSR_USE 0
 
@@ -101,17 +104,19 @@ extern "C" {
 // v01_20 09 09 2018 1. built on 01_14 ... basically 01_12 that is shipping 
 // V01_28 11 04 2018 1. Added red light when load error 
 // v01_40 05 09 2020 1. fills g prime with +10 
+// v01_92 02 14 2021 1. added in conditional for brakeStatus & BRAKESTATE_ERRORLOADSET
+//                        to display setup brake error and be red
 #define FWVER3 '0'
 #define FWVER2 '1'
-#define FWVER1 '4'
-#define FWVER0 '0'
+#define FWVER1 '9'
+#define FWVER0 '2'
 
 #define MONTHMSB  '0'
-#define MONTHLSB  '5'
-#define DAYMSB    '0'
-#define DAYLSB    '9'
+#define MONTHLSB  '2'
+#define DAYMSB    '1'
+#define DAYLSB    '4'
 #define YEARMSB   '2'
-#define YEARLSB   '0'
+#define YEARLSB   '1'
 
 #else
 //=========================BRAKE BOARD ======================
@@ -239,17 +244,44 @@ extern "C" {
 //                   4. load wait back to ERROR 
 // v01_64 10 20 2020 1. added clearing on errors when power is cycled. 
 //                   2. 
+// v01_65 10 29 2020 1. removed supercap value when in IDLE_SLEEP to be a certain value to 
+//                        clear an input voltage error. 
+//                   2. lowered voltage error back to 8V on input voltage errors. 
+// v01_66 10 30 2020 1. reduced the 8.5v to 8v
+// v01_67 11 02 2020 1. adjusted timing out for low voltage detet 
+// v01_68 11 05 2020 1. moved voltage bad time to 3 seconds. 
+// v01_70 11 05 2020 1. 2 sec 
+// v01_70 11 05 2020 1. 1 sec
+// V01_72 11 19 2020 1. NORMAL 8 VOLTS
+// v01_73 11 19 2020 1. 7 volts 
+// v01_74 11 19 2020 1. 6 volts
+// v01_75 12 06 2020 1. 8 volts for pre-setup time and leaving at 6v for setup period
+// v01_76 12 15 2020 1. added check for input voltage in 2 states before waiting for extension
+//                      to complete. POWEREDUP0 and PRESET0
+// V01_77 12 17 2020 1. DROPPED the 25msec to 15msec on input voltage bad
+// V01_85 02 02 2021 1. FIXED supervisory task time - moved to 1mec execution to allow dropping to 
+//                      15msec window. 
+//                   2. fixed active operation was missing a "break"
+// v01_86 02 03 2021 1. got rid of use of prevBrakeState when an extension has happened during a 
+//                       ignored load error
+// v01_87 02 03 2021 1. changed sup time after retract and home from 10sec to 2 sec
+// v01_88 02 04 2021 1. changed hold off time after load error detected in BRAKESTATE_HOLDOFF_ACTIVE
+//                           from 10 sec to 2 sec
+// v01_89 02 04 2021
+// v01_90 02 05 2021 1. undid the 01_86 to 01_87 change. 
+// v01_93 02 14 2021 1. just retaining orange led when a load error 
+//                         has been detected, even if it has cleared. 
 #define FWVER3 '0'
 #define FWVER2 '1'
-#define FWVER1 '6'
-#define FWVER0 '4'
+#define FWVER1 '9'
+#define FWVER0 '3'
 
-#define MONTHMSB  '1'
-#define MONTHLSB  '0'
-#define DAYMSB    '2'
-#define DAYLSB    '0'
+#define MONTHMSB  '0'
+#define MONTHLSB  '2'
+#define DAYMSB    '1'
+#define DAYLSB    '4'
 #define YEARMSB   '2'
-#define YEARLSB   '0'
+#define YEARLSB   '1'
 #endif
 
 extern int wdogTimer;
@@ -263,7 +295,9 @@ extern uint8_t switchOnTransmit;
 extern uint8_t whichRadio;  
  
 extern unsigned int schedByte; 
-#define SCHEDBYTE_ACCELEROMETER			0x0001
+#if BRAKEBOARD
+#define SCHEDBYTE_BRAKESUP   			0x0001
+#endif 
 
 #if REMOTEBOARD
 #define SCHEDBYTE_SCREENREFRESH			0x0002
@@ -278,12 +312,14 @@ extern unsigned int schedByte;
 #define SCHEDBYTE_BRAKETASK				0x0040
 #endif
 #define SCHEDBYTE_APPSCREENKEYCHANGE	0x0080
+#define SCHEDBYTE_TESTSEND			    0x0080
 #define SCHEDBYTE_UPDATEPRESSURE		0x0100
 #define SCHEDBYTE_RFFSK					0x0200
 #define SCHEDBYTE_RFLORA				0x0400
 #if REMOTEBOARD
 #define SCHEDBYTE_COMMTOBRAKE			0x0800
 #endif
+#define SCHEDBYTE_ACCELEROMETER			0x1000
 #define SCHEDBYTE_COMMSUP				0x2000
 #define SCHEDBYTE_DOWNLOAD_DONE			0x4000
 
