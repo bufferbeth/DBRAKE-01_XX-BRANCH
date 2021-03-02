@@ -1003,6 +1003,7 @@ void AppStatusInitialization(void)
 	brakeStatus.ActuatorStatus = 0; 
 	brakeStatus.BrakeState = 0;
 	brakeStatus.VoltageSupercap = 0; 
+	brakeStatus.BrakeState2 = 0; 
 }
 
 //xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx

@@ -534,7 +534,19 @@ void AppProtocolBrake(uint8_t *buffers)
 						protocolBuffer[12] = brakeStatus.ActuatorStatus;;
 						protocolBuffer[13] = brakeStatus.BrakeState;	
 						protocolBuffer[14] = brakeStatus.VoltageSupercap; 	
-						protocolBuffer[15] = brakeState; 		
+						protocolBuffer[15] = brakeState;
+						if (((brakeStatus.BrakeState & BRAKESTATE_ERRORLOADSET)!=0))
+						{					
+							if ((brakeState != BRAKESTATE_ACTIVE_EXTEND_BREAKAWAY)&&
+							(brakeState != BRAKESTATE_ACTIVE_HOLD_BREAKAWAY)&&
+							(brakeState != BRAKESTATE_END_RETRACT_BREAKAWAY)&&
+							(brakeState != BRAKESTATE_ACTIVE_EXTEND_MANUAL)&&
+							(brakeState != BRAKESTATE_ACTIVE_HOLD_MANUAL)&&
+							(brakeState != BRAKESTATE_END_RETRACT_MANUAL))				
+							{
+								protocolBuffer[15] = BRAKESTATE_ERROR; 
+							}
+						}
 						protocolBuffer[16] = 0x00; 	
 						if (switchToFSK ==TRUE)
 						{

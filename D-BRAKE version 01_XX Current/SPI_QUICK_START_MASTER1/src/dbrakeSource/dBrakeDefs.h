@@ -271,15 +271,21 @@ extern "C" {
 // v01_90 02 05 2021 1. undid the 01_86 to 01_87 change. 
 // v01_93 02 14 2021 1. just retaining orange led when a load error 
 //                         has been detected, even if it has cleared. 
+// v01_94 02 17 2021 1. added patch to force BRAKE_ERROR state when load error bit is set
+// v01_95 02 18 2021 1. checks for breakaway and manual and will not mask if those present. 
+// v01_97 02 26 2021 1. fixed triangle on display 
+//                   2. 
+// v01_98 03 01 2021 1. fixed retract time out and broken triangle 
+
 #define FWVER3 '0'
 #define FWVER2 '1'
 #define FWVER1 '9'
-#define FWVER0 '3'
+#define FWVER0 '8'
 
 #define MONTHMSB  '0'
-#define MONTHLSB  '2'
-#define DAYMSB    '1'
-#define DAYLSB    '4'
+#define MONTHLSB  '3'
+#define DAYMSB    '0'
+#define DAYLSB    '1'
 #define YEARMSB   '2'
 #define YEARLSB   '1'
 #endif
@@ -366,6 +372,8 @@ typedef struct
 	#define BRAKESTATE_LOWSUPERCAP  		0x20
 	#define BRAKESTATE_BREAKAWAYREADY		0x40
 	#define BRAKESTATE_ERRORLOADSET			0x80  //01_28 changed
+	uint8_t BrakeState2; 
+	#define BRAKESTATE_ERRORLOADSET_VALUE	0x01
 }BRAKEDATA;
 extern BRAKEDATA brakeStatus;
 

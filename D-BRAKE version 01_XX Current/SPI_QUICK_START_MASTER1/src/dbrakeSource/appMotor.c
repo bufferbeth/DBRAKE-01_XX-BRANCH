@@ -108,7 +108,7 @@ uint8_t brakeBiLED;
 uint8_t brakeBlueLED;
 uint8_t brakeRedLED; 
 
-
+uint16_t fsrReading;
 
 uint16_t motorRunTime;
 uint16_t prevMotorRunTime; 
@@ -435,9 +435,18 @@ void BrakeLEDControl(void)
 			}
 			else
 			{
-				brakeBiLED = BRAKEBILED_OFF;
-				brakeBlueLED = BRAKEBLUELED_ALTGREEN;
-				brakeRedLED = BRAKEREDLED_OFF; 			
+				if ((brakeStatus.BrakeState2 &BRAKESTATE_ERRORLOADSET_VALUE)!= 0)
+				{
+					brakeBiLED = BRAKEBILED_OFF;
+					brakeBlueLED = BRAKEBLUELED_ALTYELLOW;
+					brakeRedLED = BRAKEREDLED_OFF;				
+				}
+				else
+				{
+					brakeBiLED = BRAKEBILED_OFF;
+					brakeBlueLED = BRAKEBLUELED_ALTGREEN;
+					brakeRedLED = BRAKEREDLED_OFF;
+				}
 			}
 			break;
 		}		
@@ -908,6 +917,16 @@ void BrakeBoardStateMachineTask(void)
 		case BRAKESTATE_WAITONSETUP:
 		case BRAKESTATE_WAITONSETUPLOADCELL:		
 		{
+			itemp = ADCGetReading(ADC_INPUT_FSR);
+			fsrReading = itemp;
+			if (((fsrReading <10)||(fsrReading >4000))&&(fsrReading != 0x0fff))
+			{
+				brakeStatus.BrakeState2 |=BRAKESTATE_ERRORLOADSET_VALUE;
+			}	
+			else
+			{
+				brakeStatus.BrakeState2 &= (~BRAKESTATE_ERRORLOADSET_VALUE);
+			}
 			//----- boc V01_23 check for force on pedal before setup
 //			itemp3 = ADCGetReading(ADC_INPUT_FSR);
 			itemp3 = LoadCell(BRAKESTATE_WAITONSETUP);
@@ -1881,10 +1900,12 @@ void BrakeBoardStateMachineTask(void)
 					if (brakeState == BRAKESTATE_END_RETRACT_TIMEOUT)
 					{
 						brakeSupTime = BRAKESUPTIME_TIMEOUT;	
+						MotorNeedNewBaseline();
 					}
 
 					brakeState = BRAKESTATE_HOLDOFF_ACTIVE;
-					MotorNeedNewBaseline();
+					
+//v01_97			MotorNeedNewBaseline();
 //					if (prevBrakeState !=BRAKESTATE_ERRORLOADWAIT )
 //					{
 						brakeState = BRAKESTATE_HOLDOFF_ACTIVE;
@@ -1917,11 +1938,12 @@ void BrakeBoardStateMachineTask(void)
 						if (brakeState == BRAKESTATE_END_RETRACT_TIMEOUT)
 						{
 							brakeSupTime = BRAKESUPTIME_TIMEOUT;	
+							MotorNeedNewBaseline();
 						}		
 //						if (prevBrakeState !=BRAKESTATE_ERRORLOADWAIT )	
 //						{		
 							brakeState = BRAKESTATE_HOLDOFF_ACTIVE;
-							MotorNeedNewBaseline();
+//v01_97							MotorNeedNewBaseline();
 //						}
 //						else
 //						{
