@@ -23,7 +23,7 @@
 
 #define SUPERCAP_17V	2615   //0XA37
 #define SUPERCAP_17PT5	2690
-
+#define SUPERCAP10VAPPROX	1536
 //---------------------GLOBAL VARIABLES--------------------------
 extern uint16_t maxCurrentRead; 
 extern uint16_t maxFSRRead; 

@@ -26,6 +26,8 @@
 #define HOME_IN 0
 #define HOME_OUT 1
 uint8_t homeLimit = HOME_OUT;  
+uint8_t bothSensorsActive = 0; 
+uint8_t pauseAction = 0; 
  
 uint8_t brakeState;
 uint8_t prevBrakeState;
@@ -378,6 +380,13 @@ void BrakeLEDControl(void)
 			brakeRedLED = BRAKEREDLED_OFF; 
 			break; 
 		}
+		case BRAKESTATE_PRESETUP0PAUSE:
+		{
+			brakeBiLED = BRAKEBILED_YELLOWFLASH;
+			brakeBlueLED = BRAKEBLUELED_OFF;
+			brakeRedLED = BRAKEREDLED_OFF;
+			break;
+		}		
 		case BRAKESTATE_RESET:
 		case BRAKESTATE_PRESETUP:
 		case BRAKESTATE_PRESETUP0:
@@ -397,10 +406,19 @@ void BrakeLEDControl(void)
 				brakeRedLED = BRAKEREDLED_OFF;
 			}
 			else
-			{			
-				brakeBiLED = BRAKEBILED_REDSOLID;
-				brakeBlueLED = BRAKEBLUELED_SOLID;
-				brakeRedLED = BRAKEREDLED_OFF;
+			{
+				if ((brakeStatus.BrakeState2 &BRAKESTATE_ERRORLOADSET_VALUE)!= 0)
+				{
+					brakeBiLED = BRAKEBILED_OFF;
+					brakeBlueLED = BRAKEBLUELED_ALTYELLOW;
+					brakeRedLED = BRAKEREDLED_OFF;				
+				}	
+				else
+				{			
+					brakeBiLED = BRAKEBILED_REDSOLID;
+					brakeBlueLED = BRAKEBLUELED_SOLID;
+					brakeRedLED = BRAKEREDLED_OFF;
+				}
 			}
 			break;
 		}
@@ -545,30 +563,17 @@ else
 	//--------------------------------
 	// check voltages
 	currentvalue = ADCGetReading(ADC_INPUT_VOLTAGE);
-	supercapValue = ADCGetReading(ADC_INPUT_SUPERCAP);		
-	UsartSendData(currentvalue);
-	if (currentvalue< ADC_INPUTVOLTAGE_ERROR)  //ADC_INPUTVOLTAGE_8)
+	supercapValue = ADCGetReading(ADC_INPUT_SUPERCAP);
+	if (bothSensorsActive != 0)
 	{
-		if ((fastVoltageBadTime >= VOLTAGEFAST_BAD_TIME)&&
-		((brakeState == BRAKESTATE_PRESETUP0)||
-		(brakeState == BRAKESTATE_WAITONSETUP)||
-		(brakeState == BRAKESTATE_PRESETUP)||
-		(brakeState == BRAKESTATE_POWERINGUP)||
-		(brakeState == BRAKESTATE_POWEREDUP)||
-		(brakeState == BRAKESTATE_POWEREDUP0)))
+		pauseAction = 1; 
+		if (supercapValue > 0x800)
 		{
-			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)== 0)
-			{
-				brakeStatus.BrakeState |= BRAKESTATE_INPUTVOLTAGEBAD;
-			}
-		}	
+			brakeState = BRAKESTATE_ERROR;
+		}
 	}
-	else
-	{	
-		fastVoltageBadTime = 0; 	
-	}
-	
-	if (currentvalue< ADC_INPUTVOLTAGE_ERRORSTART)
+
+	if (currentvalue< ADC_INPUTVOLTAGE_8)
 	{
 		if (voltageBadTime >= VOLTAGE_BAD_TIME)
 		{
@@ -577,22 +582,36 @@ else
 				brakeStatus.BrakeState |= BRAKESTATE_INPUTVOLTAGEBAD;
 			}
 		}
+		if (currentvalue < ADC_INPUTVOLTAGENONE)
+		{
+			brakeStatus.BrakeState2 |= BRAKESTATE_NOINPUTVOLTAGE;
+		}
 	}
 	else
 	{
+		brakeStatus.BrakeState2 &= ~BRAKESTATE_NOINPUTVOLTAGE;
 		if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 		{
-//			if ((currentvalue> ADC_INPUTVOLTAGE_8PT5)&&
-			if ((currentvalue> ADC_INPUTVOLTAGE_RECOVER)&&			
-			   ((supercapValue > 0x800)||(brakeState == BRAKESTATE_IDLESLEEP)))
+			if (currentvalue> ADC_INPUTVOLTAGE_8PT5)
 			{
-				brakeStatus.BrakeState &= ~BRAKESTATE_INPUTVOLTAGEBAD;	
-				brakeStatus.BrakeState &= ~BRAKESTATE_LOWSUPERCAP;	
+				brakeStatus.BrakeState &= ~BRAKESTATE_INPUTVOLTAGEBAD;
 			}
 		}
-		voltageBadTime = 0; 
-		fastVoltageBadTime = 0; 
+		else
+		{
+			voltageBadTime = 0;
+		}
 	}
+	if (currentvalue>= ADC_INPUTVOLTAGE_8PT5)
+	{
+		if ((supercapValue > SUPERCAP10VAPPROX)||(brakeState == BRAKESTATE_IDLESLEEP))
+		{
+			brakeStatus.BrakeState &= ~BRAKESTATE_INPUTVOLTAGEBAD;
+			brakeStatus.BrakeState &= ~BRAKESTATE_LOWSUPERCAP;	
+		}
+	}	
+	
+	
 	//-----------------------------------------
 	// if voltage is over 10.5 volts and board is turned on - 
 	// enable the super cap. 
@@ -705,7 +724,23 @@ void BrakeBoardStateMachineTask(void)
 	{
 		brakeStatus.BrakeState &= ~BRAKESTATE_BREAKAWAYREADY;
 	}	
-
+/*
+	if ((pauseAction==0)&&(brakeState == BRAKESTATE_PAUSE))
+	{
+		//---------------------------------
+		// leave the pause state	
+	}
+	else
+	{
+		if ((pauseAction!=0)&&(brakeState != BRAKESTATE_PAUSE))
+		{
+			//---------------------------------
+			// enter the pause state
+//			prePauseState = brakeState;
+//			prePauseAction = action; 	
+		}		
+	}
+*/	
 	
 	switch(brakeState)
 	{
@@ -859,6 +894,7 @@ void BrakeBoardStateMachineTask(void)
 		}
 //----- V01_20 below state added 		
 		case BRAKESTATE_PRESETUP0:
+		case BRAKESTATE_PRESETUP0PAUSE:
 		{
 			if ((brakeStatus.BrakeState & BRAKESTATE_INPUTVOLTAGEBAD)!= 0)
 			{
@@ -866,13 +902,28 @@ void BrakeBoardStateMachineTask(void)
 			}
 			else
 			{
-				if (((brakeChange & BRAKECHANGE_SUPTIME)!= 0)||(encoderCountBack==0))
+				if (pauseAction != 0)
 				{
-					MotorOff(1);				
-					brakeState = BRAKESTATE_PRESETUP;
-					MotorCCW();
-					brakeSupTime = 150;  //5 seconds to retract
-					brakeChange &= ~BRAKECHANGE_SUPTIME;
+					brakeState = BRAKESTATE_PRESETUP0PAUSE;
+					//----------------------------
+					// WAIT for supercap charged 
+					if ((brakeStatus.BrakeState & BRAKESTATE_LOWSUPERCAP)== 0)
+					{
+						pauseAction = 0; 
+						brakeState = BRAKESTATE_PRESETUP0;
+						
+					}							
+				}
+				else
+				{
+					if (((brakeChange & BRAKECHANGE_SUPTIME)!= 0)||(encoderCountBack==0))
+					{
+						MotorOff(1);				
+						brakeState = BRAKESTATE_PRESETUP;
+						MotorCCW();
+						brakeSupTime = 150;  //5 seconds to retract
+						brakeChange &= ~BRAKECHANGE_SUPTIME;
+					}
 				}
 			}
 			break;			
@@ -917,9 +968,9 @@ void BrakeBoardStateMachineTask(void)
 		case BRAKESTATE_WAITONSETUP:
 		case BRAKESTATE_WAITONSETUPLOADCELL:		
 		{
-			itemp = ADCGetReading(ADC_INPUT_FSR);
-			fsrReading = itemp;
-			if (((fsrReading <10)||(fsrReading >4000))&&(fsrReading != 0x0fff))
+			itemp2 = ADCGetReading(ADC_INPUT_FSR);
+			fsrReading = itemp2;
+			if ((fsrReading <10)||(fsrReading >4000))
 			{
 				brakeStatus.BrakeState2 |=BRAKESTATE_ERRORLOADSET_VALUE;
 			}	
@@ -930,7 +981,7 @@ void BrakeBoardStateMachineTask(void)
 			//----- boc V01_23 check for force on pedal before setup
 //			itemp3 = ADCGetReading(ADC_INPUT_FSR);
 			itemp3 = LoadCell(BRAKESTATE_WAITONSETUP);
-			if (itemp3>0x60)								
+			if ((itemp3>0x60)&&(fsrReading != 0x0fff))								
 			{
 				brakeState = BRAKESTATE_WAITONSETUPLOADCELL;
 													
@@ -2898,6 +2949,14 @@ void MotorFLimitCallback(void)
 	{
 		MotorOff(0);
 	}
+	if (hlimitState == 0)
+	{
+		bothSensorsActive = 1; 
+	}
+	else
+	{
+		bothSensorsActive = 0;
+	}	
 }
 
 
@@ -2949,6 +3008,14 @@ void MotorHLimitCallback(void)
 		{
 			homeLimit = HOME_OUT;
 		}
+		if (flimitState == 0)
+		{
+			bothSensorsActive = 1;
+		}
+		else
+		{
+			bothSensorsActive = 0;
+		}		
 	}
 	else
 	{

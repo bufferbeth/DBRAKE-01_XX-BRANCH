@@ -276,16 +276,22 @@ extern "C" {
 // v01_97 02 26 2021 1. fixed triangle on display 
 //                   2. 
 // v01_98 03 01 2021 1. fixed retract time out and broken triangle 
+// v01_99 03 02 2021 1. 15mec moved to 30 mec on low voltage detect
+// v03_00 03 08 2021 
+//          If both the Home limit and Extend limit trigger at the same time, pause the current task.
+//          Check supercap voltage.  If it is below 10 volts, flash orange blinking light and wait until supercaps charge to 10 volts and then continue the current task.
+//          If home and extend limits are both present above 10 volts then the brake is broken. Red flashing light on control panel. enter error state.
+//          Power cycling will clear either of these two errors.
 
 #define FWVER3 '0'
-#define FWVER2 '1'
-#define FWVER1 '9'
-#define FWVER0 '8'
+#define FWVER2 '3'
+#define FWVER1 '0'
+#define FWVER0 '3'
 
 #define MONTHMSB  '0'
 #define MONTHLSB  '3'
-#define DAYMSB    '0'
-#define DAYLSB    '1'
+#define DAYMSB    '1'
+#define DAYLSB    '5'
 #define YEARMSB   '2'
 #define YEARLSB   '1'
 #endif
@@ -374,6 +380,7 @@ typedef struct
 	#define BRAKESTATE_ERRORLOADSET			0x80  //01_28 changed
 	uint8_t BrakeState2; 
 	#define BRAKESTATE_ERRORLOADSET_VALUE	0x01
+	#define BRAKESTATE_NOINPUTVOLTAGE		0x20
 }BRAKEDATA;
 extern BRAKEDATA brakeStatus;
 

@@ -40,6 +40,7 @@ extern uint8_t brakeState;
 #define BRAKESTATE_ERROR_VOLTAGE_ACTIVE 25
 #define BRAKESTATE_SETUPACTIVE_END	33
 #define BRAKESTATE_ERROR_RETRACT_LOWVOLTAGE 36
+#define BRAKESTATE_PRESETUP0PAUSE	37
 
 #if BRAKEBOARD 
 
@@ -130,7 +131,7 @@ extern uint16_t breakawayHoldTimer;
 extern uint16_t fastVoltageBadTime; 	
 extern uint16_t voltageBadTime;
 #define VOLTAGE_BAD_TIME	5  //30 
-#define VOLTAGEFAST_BAD_TIME 50
+#define VOLTAGEFAST_BAD_TIME 80  //50
  
 #define DITHER_TIME 1000
 extern uint16_t ditherTimer; 

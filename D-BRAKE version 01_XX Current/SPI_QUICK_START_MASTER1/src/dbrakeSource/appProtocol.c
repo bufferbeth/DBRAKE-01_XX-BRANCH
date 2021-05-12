@@ -532,9 +532,24 @@ void AppProtocolBrake(uint8_t *buffers)
 						protocolBuffer[10] = brakeStatus.VoltageInput;
 						protocolBuffer[11] = brakeStatus.AccelerometerStatus;
 						protocolBuffer[12] = brakeStatus.ActuatorStatus;;
+						if (brakeState == BRAKESTATE_PRESETUP0PAUSE)
+						{
+							brakeStatus.BrakeState|=BRAKESTATE_INPUTVOLTAGEBAD;
+						}						
 						protocolBuffer[13] = brakeStatus.BrakeState;	
+						if (brakeState == BRAKESTATE_PRESETUP0PAUSE)
+						{
+							brakeStatus.BrakeState&=(~BRAKESTATE_INPUTVOLTAGEBAD);
+						}									
 						protocolBuffer[14] = brakeStatus.VoltageSupercap; 	
-						protocolBuffer[15] = brakeState;
+						if (brakeState == BRAKESTATE_PRESETUP0PAUSE)
+						{
+							protocolBuffer[15] = BRAKESTATE_ERROR_FINAL;
+						}
+						else
+						{
+							protocolBuffer[15] = brakeState;
+						}
 						if (((brakeStatus.BrakeState & BRAKESTATE_ERRORLOADSET)!=0))
 						{					
 							if ((brakeState != BRAKESTATE_ACTIVE_EXTEND_BREAKAWAY)&&
@@ -547,6 +562,7 @@ void AppProtocolBrake(uint8_t *buffers)
 								protocolBuffer[15] = BRAKESTATE_ERROR; 
 							}
 						}
+
 						protocolBuffer[16] = 0x00; 	
 						if (switchToFSK ==TRUE)
 						{
